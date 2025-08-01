@@ -52,6 +52,15 @@ function startListening() {
   // Clear previous transcripts
   clearTranscript();
   
+  // Reset tracking variables
+  previousInterimText = '';
+  translationHistory = []; // Reset translation history
+  recentTranslations.clear(); // Clear recent translations cache
+  if (translationTimeout) {
+    clearTimeout(translationTimeout);
+    translationTimeout = null;
+  }
+  
   // Start speech recognition
   speechService.start();
   isListening = true;
@@ -70,6 +79,10 @@ function stopListening() {
   btnText.textContent = 'Start Listening';
 }
 
+// Track previous interim results to detect new words
+let previousInterimText = '';
+let translationTimeout = null;
+
 function handleSpeechResult(result) {
   // Clear placeholder if it exists
   const placeholder = transcriptBox.querySelector('.placeholder');
@@ -80,9 +93,22 @@ function handleSpeechResult(result) {
   // Update transcript display
   updateTranscriptDisplay(result.final, result.interim);
   
-  // Translate final text
+  // Handle final results - skip them for pure real-time experience
   if (result.isFinal && result.final.trim()) {
-    translateText(result.final);
+    // Just reset for next sentence, don't translate finals
+    previousInterimText = '';
+  } else if (result.interim && result.interim.trim()) {
+    // Detect ANY new content for immediate translation
+    const currentText = result.interim.trim();
+    const previousText = previousInterimText.trim();
+    
+    // Translate if there's any new content (even a single new word)
+    if (currentText !== previousText && currentText.length > previousText.length) {
+      // Translate IMMEDIATELY for maximum flow
+      translateText(currentText, true); // true = partial translation
+    }
+    
+    previousInterimText = result.interim;
   }
 }
 
@@ -145,19 +171,113 @@ function clearTranscript() {
 // Translation queue to handle multiple requests
 let translationQueue = [];
 let isTranslating = false;
+let translationHistory = []; // Keep track of translations with metadata
+let recentTranslations = new Map(); // Track recent translations to avoid duplicates
 
-async function translateText(text) {
+// Helper function to calculate string similarity (0-1)
+function calculateSimilarity(str1, str2) {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const editDistance = getEditDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+}
+
+// Levenshtein distance for fuzzy matching
+function getEditDistance(str1, str2) {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
+}
+
+async function translateText(text, isPartial = false) {
   if (!translationService || !text.trim()) {
     return;
   }
+  
+  // For partial translations, skip all checks for maximum flow
+  if (isPartial) {
+    translatePartial(text);
+    return;
+  }
+  
+  // Only check duplicates for final translations
+  const normalizedText = text.trim().toLowerCase();
+  const recentTranslation = recentTranslations.get(normalizedText);
+  
+  if (recentTranslation && Date.now() - recentTranslation.timestamp < 10000) {
+    console.log('Skipping duplicate translation:', text.substring(0, 50));
+    return;
+  }
 
-  // Add to queue
+  // Add to queue for final translations
   translationQueue.push(text);
   
   // Process queue if not already processing
   if (!isTranslating) {
     processTranslationQueue();
   }
+}
+
+async function translatePartial(text) {
+  // Clear translation placeholder
+  const placeholder = translationBox.querySelector('.placeholder');
+  if (placeholder) {
+    placeholder.remove();
+  }
+
+  try {
+    const translatedText = await translationService.translate(text);
+    const timestamp = Date.now();
+    
+    // Store in cache to prevent re-translation
+    recentTranslations.set(text.trim().toLowerCase(), {
+      translation: translatedText,
+      timestamp: timestamp
+    });
+    
+    // Update display with smooth flow
+    updatePartialTranslation(translatedText);
+    
+  } catch (error) {
+    console.error('Partial translation error:', error);
+    // Don't show error for partial translations, just wait for final
+  }
+}
+
+function updatePartialTranslation(partialText) {
+  // Pure real-time: show only the blue flowing translation
+  translationBox.innerHTML = '';
+  
+  const partialElement = document.createElement('p');
+  partialElement.className = 'interim';
+  partialElement.textContent = partialText;
+  partialElement.style.fontSize = '20px'; // Even larger for real-time visibility
+  translationBox.appendChild(partialElement);
 }
 
 async function processTranslationQueue() {
@@ -167,43 +287,82 @@ async function processTranslationQueue() {
   }
 
   isTranslating = true;
-  const text = translationQueue.shift();
+  const sourceText = translationQueue.shift();
 
-  // Clear translation placeholder
+  // Clear translation placeholder if it exists
   const placeholder = translationBox.querySelector('.placeholder');
   if (placeholder) {
     placeholder.remove();
   }
 
-  // Show loading state
-  translationBox.innerHTML = '<p style="color: #666; font-style: italic;">Translating...</p>';
-
   try {
-    const translatedText = await translationService.translate(text);
+    const translatedText = await translationService.translate(sourceText);
+    const timestamp = Date.now();
     
-    // Display translation
-    translationBox.innerHTML = '';
-    const translationP = document.createElement('p');
-    translationP.className = 'final';
-    translationP.textContent = translatedText;
-    translationBox.appendChild(translationP);
+    // Store in recent translations cache
+    recentTranslations.set(sourceText.trim().toLowerCase(), {
+      translation: translatedText,
+      timestamp: timestamp
+    });
     
-    // Auto-scroll to bottom
-    translationBox.scrollTop = translationBox.scrollHeight;
+    // Clean up old entries from cache (older than 30 seconds)
+    for (const [key, value] of recentTranslations.entries()) {
+      if (timestamp - value.timestamp > 30000) {
+        recentTranslations.delete(key);
+      }
+    }
     
-    // Add a small delay before processing next item to avoid rate limiting
+    // Process the translation
+    addTranslationToHistory(sourceText, translatedText, timestamp);
+    
+    // Update display
+    updateTranslationDisplay();
+    
+    // Process next item immediately for better flow
     setTimeout(() => {
       processTranslationQueue();
-    }, 500);
+    }, 100); // Reduced to 100ms for faster flow
   } catch (error) {
     console.error('Translation error:', error);
-    translationBox.innerHTML = '<p style="color: #f44336;">Translation error. Please check console for details.</p>';
+    
+    // Add error to history
+    addTranslationToHistory(sourceText, `[Error: ${error.message}]`, Date.now(), true);
+    updateTranslationDisplay();
     
     // Continue processing queue after error
     setTimeout(() => {
       processTranslationQueue();
     }, 1000);
   }
+}
+
+function addTranslationToHistory(sourceText, translatedText, timestamp, isError = false) {
+  // For flow mode: keep only the current sentence
+  // Clear history and add only the latest translation
+  translationHistory = [{
+    source: sourceText,
+    translation: translatedText.trim(),
+    timestamp: timestamp,
+    isError: isError
+  }];
+}
+
+function updateTranslationDisplay() {
+  translationBox.innerHTML = '';
+  
+  // Display only the current translation (single sentence)
+  if (translationHistory.length > 0) {
+    const entry = translationHistory[0]; // Only one entry now
+    const p = document.createElement('p');
+    p.className = entry.isError ? 'error' : 'final';
+    p.textContent = entry.translation;
+    p.style.fontSize = '18px'; // Larger font for better visibility
+    p.style.animation = 'fadeIn 0.3s ease-in';
+    translationBox.appendChild(p);
+  }
+  
+  // Auto-scroll to bottom (though not needed with single sentence)
+  translationBox.scrollTop = translationBox.scrollHeight;
 }
 
 function showError(message) {

@@ -19,13 +19,21 @@ A Chrome extension that provides real-time speech recognition and translation fr
    cd real-translate-extension
    ```
 
-2. **Load the extension in Chrome**
+2. **Configure API Key**
+   - Copy `src/config.template.js` to `src/config.js`
+   - Add your DeepL API key to `src/config.js`
+   - Get a free API key from: https://www.deepl.com/pro-api
+   ```javascript
+   DEEPL_API_KEY: 'your-api-key-here'
+   ```
+
+3. **Load the extension in Chrome**
    - Open Chrome and navigate to `chrome://extensions/`
    - Enable "Developer mode" (toggle in top right)
    - Click "Load unpacked"
    - Select the cloned repository folder
 
-3. **Grant permissions**
+4. **Grant permissions**
    - The extension will request microphone access when first used
    - Allow the permission to enable speech recognition
 
@@ -47,8 +55,9 @@ A Chrome extension that provides real-time speech recognition and translation fr
 ### Technologies Used
 - **Chrome Extension Manifest V3**
 - **Web Speech API** for speech recognition
-- **Google Translate API** (unofficial) for translations
-- **Fallback**: MyMemory Translation API
+- **DeepL API** for high-quality translations (primary)
+- **Google Translate API** (fallback)
+- **MyMemory Translation API** (secondary fallback)
 
 ### Project Structure
 ```

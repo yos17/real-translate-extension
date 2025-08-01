@@ -148,6 +148,41 @@ h1 {
   border-color: #4CAF50;
 }
 
+.translation-box .interim {
+  border-left: 4px solid #2196F3;
+  padding-left: 12px;
+  margin-left: -12px;
+  color: #1565C0;
+  font-weight: 500;
+  animation: pulse 1.5s ease-in-out infinite;
+  line-height: 1.6;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.translation-box .error {
+  color: #f44336;
+  font-style: italic;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .transcript-box p,
 .translation-box p {
   margin: 0 0 8px 0;

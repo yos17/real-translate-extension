@@ -1,10 +1,24 @@
-class TranslationService {
+// DeepL Translation Service
+class DeepLTranslationService {
   constructor() {
-    // Using MyMemory Translation API (free tier available)
-    // Alternative: Google Translate API (requires API key)
-    this.apiUrl = 'https://api.mymemory.translated.net/get';
-    this.sourceLang = 'id'; // Indonesian
-    this.targetLang = 'de'; // German
+    this.sourceLang = 'ID'; // Indonesian (DeepL uses uppercase codes)
+    this.targetLang = 'DE'; // German
+    
+    // Debug config loading
+    console.log('Checking for translation config:', window.translationConfig);
+    
+    this.apiKey = window.translationConfig?.DEEPL_API_KEY;
+    this.apiUrl = window.translationConfig?.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate';
+    
+    if (!this.apiKey) {
+      console.error('DeepL API key not found. Please add it to config.js');
+      console.error('Config object:', window.translationConfig);
+    } else {
+      console.log('DeepL API configured successfully');
+      console.log('API URL:', this.apiUrl);
+      // Don't log the full API key for security
+      console.log('API Key present:', this.apiKey.substring(0, 8) + '...');
+    }
   }
 
   async translate(text) {
@@ -12,155 +26,109 @@ class TranslationService {
       return '';
     }
 
-    try {
-      // Build the API request URL
-      const params = new URLSearchParams({
-        q: text,
-        langpair: `${this.sourceLang}|${this.targetLang}`,
-        mt: '1' // Enable machine translation
-      });
-
-      const response = await fetch(`${this.apiUrl}?${params}`);
-      
-      if (!response.ok) {
-        throw new Error(`Translation API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      // Check if translation was successful
-      if (data.responseStatus === 200 && data.responseData) {
-        return data.responseData.translatedText;
-      } else {
-        console.error('Translation error:', data);
-        throw new Error(data.responseDetails || 'Translation failed');
-      }
-    } catch (error) {
-      console.error('Translation error:', error);
-      throw error;
-    }
-  }
-
-  // Set source language
-  setSourceLanguage(langCode) {
-    this.sourceLang = langCode;
-  }
-
-  // Set target language
-  setTargetLanguage(langCode) {
-    this.targetLang = langCode;
-  }
-
-  // Get current language pair
-  getLanguagePair() {
-    return {
-      source: this.sourceLang,
-      target: this.targetLang
-    };
-  }
-}
-
-// Alternative implementation using Google Translate (unofficial endpoint)
-// Note: This is for demonstration. For production, use official Google Cloud Translation API
-class GoogleTranslateService {
-  constructor() {
-    this.sourceLang = 'id';
-    this.targetLang = 'de';
-  }
-
-  async translate(text) {
-    if (!text || text.trim() === '') {
-      return '';
+    if (!this.apiKey) {
+      console.error('DeepL API key not found in config');
+      throw new Error('DeepL API key not configured. Please check config.js');
     }
 
-    // Split long text into smaller chunks (Google Translate has limits)
-    const maxLength = 500; // Conservative limit to avoid errors
+    // DeepL has a 128KB limit per request, but we'll be conservative
+    const maxLength = 5000;
     if (text.length > maxLength) {
+      console.log(`Text too long (${text.length} chars), splitting for DeepL...`);
       return await this.translateLongText(text, maxLength);
     }
 
     try {
-      // Using Google Translate's web API (unofficial)
-      // For production, use Google Cloud Translation API with proper authentication
-      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${this.sourceLang}&tl=${this.targetLang}&dt=t&q=${encodeURIComponent(text)}`;
+      console.log(`Translating with DeepL (${text.length} chars): "${text.substring(0, 50)}..."`);
       
-      const response = await fetch(url);
-      
+      const params = new URLSearchParams({
+        auth_key: this.apiKey,
+        text: text,
+        source_lang: this.sourceLang,
+        target_lang: this.targetLang
+      });
+
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString()
+      });
+
+      const responseText = await response.text();
+      console.log('DeepL response status:', response.status);
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        console.error('DeepL API error response:', responseText);
+        throw new Error(`DeepL API error: ${response.status} - ${responseText}`);
+      }
+
+      const data = JSON.parse(responseText);
+      console.log('DeepL response data:', data);
+      
+      if (data.translations && data.translations.length > 0) {
+        console.log('DeepL translation successful');
+        return data.translations[0].text;
       }
       
-      const data = await response.json();
-      
-      // Extract translated text from response
-      let translatedText = '';
-      if (data && data[0]) {
-        data[0].forEach(sentence => {
-          if (sentence[0]) {
-            translatedText += sentence[0];
-          }
-        });
-      }
-      
-      return translatedText || 'Translation not available';
+      throw new Error('No translation returned from DeepL');
     } catch (error) {
-      console.error('Google Translate error:', error);
-      // Fallback to MyMemory API
-      return await this.translateWithMyMemory(text);
+      console.error('DeepL translation error:', error);
+      throw error; // Don't fallback, just throw the error
     }
   }
 
   async translateLongText(text, maxLength) {
-    // Split text into sentences or chunks
+    console.log(`Splitting long text for DeepL (${text.length} chars)...`);
+    
+    // Split by sentences
     const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    let translatedChunks = [];
+    const chunks = [];
     let currentChunk = '';
 
     for (const sentence of sentences) {
       if ((currentChunk + sentence).length > maxLength && currentChunk) {
-        // Translate current chunk
-        const translated = await this.translate(currentChunk.trim());
-        translatedChunks.push(translated);
+        chunks.push(currentChunk.trim());
         currentChunk = sentence;
       } else {
         currentChunk += sentence;
       }
     }
-
-    // Translate remaining chunk
+    
     if (currentChunk) {
-      const translated = await this.translate(currentChunk.trim());
-      translatedChunks.push(translated);
+      chunks.push(currentChunk.trim());
+    }
+
+    console.log(`Split into ${chunks.length} chunks`);
+    const translatedChunks = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        console.log(`Translating chunk ${i + 1}/${chunks.length}...`);
+        const translated = await this.translate(chunks[i]);
+        translatedChunks.push(translated);
+        // Small delay between chunks
+        if (i < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`Failed to translate chunk ${i + 1}:`, error);
+        throw error; // Stop on error instead of continuing
+      }
     }
 
     return translatedChunks.join(' ');
   }
 
-  async translateWithMyMemory(text) {
-    try {
-      console.log('Falling back to MyMemory translation API...');
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${this.sourceLang}|${this.targetLang}&mt=1`;
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.responseStatus === 200 && data.responseData) {
-        return data.responseData.translatedText;
-      }
-      
-      throw new Error('MyMemory translation failed');
-    } catch (error) {
-      console.error('MyMemory translation error:', error);
-      throw new Error('Translation service unavailable');
-    }
-  }
-
   setSourceLanguage(langCode) {
-    this.sourceLang = langCode;
+    // DeepL uses uppercase language codes
+    this.sourceLang = langCode.toUpperCase();
   }
 
   setTargetLanguage(langCode) {
-    this.targetLang = langCode;
+    // DeepL uses uppercase language codes
+    this.targetLang = langCode.toUpperCase();
   }
 
   getLanguagePair() {
@@ -172,5 +140,4 @@ class GoogleTranslateService {
 }
 
 // Export for use in popup.js
-// Using GoogleTranslateService as default for better translation quality
-window.TranslationService = GoogleTranslateService;
+window.TranslationService = DeepLTranslationService;

@@ -7,8 +7,8 @@
     "storage"
   ],
   "host_permissions": [
-    "https://translate.googleapis.com/*",
-    "https://api.mymemory.translated.net/*"
+    "https://api-free.deepl.com/*",
+    "https://api.deepl.com/*"
   ],
   "action": {
     "default_popup": "src/popup.html",
