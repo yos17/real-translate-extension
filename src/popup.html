@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Voice Translator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Voice Translator</h1>
+    <p class="subtitle">Indonesian → German</p>
+    
+    <div class="control-section">
+      <button id="toggleBtn" class="toggle-btn">
+        <span class="mic-icon">🎤</span>
+        <span id="btnText">Start Listening</span>
+      </button>
+      
+      <div id="status" class="status">
+        <span class="status-dot"></span>
+        <span id="statusText">Ready</span>
+      </div>
+    </div>
+
+    <div class="transcript-section">
+      <h3>Transcription</h3>
+      <div id="transcript" class="transcript-box">
+        <p class="placeholder">Click "Start Listening" and speak in Indonesian...</p>
+      </div>
+    </div>
+
+    <div class="translation-section">
+      <h3>Translation</h3>
+      <div id="translation" class="translation-box">
+        <p class="placeholder">Translation will appear here...</p>
+      </div>
+    </div>
+
+    <div class="settings-hint">
+      <small>Phase 2: Real-time translation from Indonesian to German</small>
+    </div>
+  </div>
+
+  <script src="speech-recognition.js"></script>
+  <script src="translation.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

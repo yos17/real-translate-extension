@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Real-Time Voice Translator",
+  "version": "1.0.0",
+  "description": "Real-time speech recognition and translation from Indonesian to German",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://translate.googleapis.com/*",
+    "https://api.mymemory.translated.net/*"
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Real-Time Voice Translator"
+  }
+}
